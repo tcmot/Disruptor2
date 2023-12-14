@@ -5,11 +5,14 @@ import com.lmax.disruptor.EventFactory;
 import com.lmax.disruptor.ExceptionHandler;
 import com.lmax.disruptor.WaitStrategy;
 import com.lmax.disruptor.dsl.ProducerType;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
 public class Test {
 
   public static void main(String[] args) {
+    ExecutorService executorService = Executors.newCachedThreadPool();
     // 对象工厂。
     final EventFactory<User> eventFactory = new EventFactory<User>() {
       @Override
@@ -26,7 +29,7 @@ public class Test {
       public Thread newThread(Runnable r) {
         return new Thread(r, "test");
       }
-    }, producerType, waitStrategy);
+    }, producerType, waitStrategy, executorService);
     // 添加异常处理。
     final ExceptionHandler<User> errorHandler = new ExceptionHandler<>() {
       @Override
@@ -60,5 +63,10 @@ public class Test {
       eventTranslator.setName("" + i);
       disruptor.publishEvent(eventTranslator);
     }
+    disruptor.shutdown();
+
+    executorService.shutdownNow();
+
+    System.out.println("xxxxxxxx");
   }
 }

@@ -10,12 +10,15 @@ import com.lmax.disruptor.RewindableEventHandler;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.Sequence;
 import com.lmax.disruptor.SequenceBarrier;
+import com.lmax.disruptor.TimeoutException;
 import com.lmax.disruptor.WaitStrategy;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ExceptionHandlerWrapper;
 import com.lmax.disruptor.dsl.ProducerType;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Disruptor2<T> extends Disruptor<T> {
@@ -30,9 +33,39 @@ public class Disruptor2<T> extends Disruptor<T> {
     executor = new BasicExecutor(threadFactory);
   }
 
-  public Disruptor2(EventFactory eventFactory, int ringBufferSize, ThreadFactory threadFactory, ProducerType producerType, WaitStrategy waitStrategy) {
+  public Disruptor2(EventFactory eventFactory, int ringBufferSize, ThreadFactory threadFactory, ProducerType producerType, WaitStrategy waitStrategy, ExecutorService executorService) {
     super(eventFactory, ringBufferSize, threadFactory, producerType, waitStrategy);
-    executor = new BasicExecutor(threadFactory);
+    executor = executorService;
+  }
+  private boolean hasBacklog()
+  {
+    final long cursor = getRingBuffer().getCursor();
+
+    return consumerRepository.hasBacklog(cursor, false);
+  }
+  public void shutdown(final long timeout, final TimeUnit timeUnit) throws TimeoutException
+  {
+    final long timeOutAt = System.nanoTime() + timeUnit.toNanos(timeout);
+    while (hasBacklog())
+    {
+      if (timeout >= 0 && System.nanoTime() > timeOutAt)
+      {
+        throw TimeoutException.INSTANCE;
+      }
+      // Busy spin
+    }
+    halt();
+  }
+
+  /**
+   * Calls {@link com.lmax.disruptor.EventProcessor#halt()} on all of the event processors created via this disruptor.
+   */
+  public void halt()
+  {
+    for (final ConsumerInfo consumerInfo : consumerRepository)
+    {
+      consumerInfo.halt();
+    }
   }
 
   /**
@@ -53,10 +86,9 @@ public class Disruptor2<T> extends Disruptor<T> {
 
     return getRingBuffer();
   }
-  private void checkOnlyStartedOnce()
-  {
-    if (!started.compareAndSet(false, true))
-    {
+
+  private void checkOnlyStartedOnce() {
+    if (!started.compareAndSet(false, true)) {
       throw new IllegalStateException("Disruptor.start() must only be called once.");
     }
   }
