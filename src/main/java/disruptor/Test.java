@@ -5,7 +5,6 @@ import com.lmax.disruptor.EventFactory;
 import com.lmax.disruptor.ExceptionHandler;
 import com.lmax.disruptor.WaitStrategy;
 import com.lmax.disruptor.dsl.ProducerType;
-import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 
 public class Test {
@@ -56,7 +55,9 @@ public class Test {
     // 启动disruptor。
     disruptor.start();
     RingBufferLogEventTranslator eventTranslator = new RingBufferLogEventTranslator();
-    for (;;){
+
+    for (int i = 0; i < 100; i++) {
+      eventTranslator.setName("" + i);
       disruptor.publishEvent(eventTranslator);
     }
   }
